@@ -9,10 +9,11 @@ const getAllUnpaidJobs = async (req, res) => {
   const profile = req.profile;
 
   try {
-    const result = await profile.getUnpaidJobsPrice();
+    const result = await profile.getUnpaidJobs();
   
     res.json(result);
   } catch (error) {
+    console.error(error);
     return res.status(error.status || 500).end();
   }
 };

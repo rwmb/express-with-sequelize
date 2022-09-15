@@ -19,12 +19,14 @@ class Profile extends Sequelize.Model {
     await this.save();  
   }
 
+
+  
   /**
-   * Gets the sum of the price of all unpaid jobs from active contracts
+   * Gets the list of unpaid jobs from active contracts
    * 
-   * @returns { number } The sum of the price of all Jobs not yet paid
+   * @returns { number } The list of Jobs not yet paid
    */
-  async getUnpaidJobsPrice() {
+  async getUnpaidJobs() {
     if (!this.id) throw new Error('Profile not initialized.');
   
     const clause = this.type === 'client' // should be Enum
@@ -32,18 +34,40 @@ class Profile extends Sequelize.Model {
       : { ContractorId: this.id };
 
     clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
-
+    clause['$Jobs.paid$'] = { [Sequelize.Op.not]: true };
     const result = await Contract.findAll({
       where: clause,
       include: {
         model: Job,
-        where: { paid: false }
+        as: 'Jobs',
       },
     });
 
-    console.log(result);
+    const response = [];
+  
+    result.forEach((currentContract) => response.push(...currentContract.get('Jobs')));
     
-    return result;
+    return response;
+  }
+  
+  /**
+   * Gets the sum of the price of all unpaid jobs from active contracts
+   * 
+   * @returns { number } The sum of the price of all Jobs not yet paid
+   */
+  async getUnpaidJobsPrice() {
+    if (!this.id) throw new Error('Profile not initialized.');
+    const result = await this.getUnpaidJobs();
+
+    // Could be done with the query itself but I have no experience with sequelize for complex queries yet.
+    // Could be done with reduce, forEach or for loop
+    // for loop should be faster but forEach and reduce is simpler to read
+
+    let sum = 0;
+    
+    sum = result.reduce((previous, currentJob) => previous + currentJob.price, sum);
+    
+    return sum;
   }
 }
 

@@ -9,7 +9,7 @@
 const getBestProfession = async (req, res) => {
   // Get all Contracts with ContractorId
   // Include Jobs where paidAt between range and paid equals true
-  // sort by sum desc and get firstOne
+  // sort by sum desc and get first
 
   const result = {};
   res.json(result);
