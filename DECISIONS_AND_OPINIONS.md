@@ -24,3 +24,5 @@ One approach I think is good is to separate the folders by feature, so that Mode
 11. For this API it would be a good approach to add a UI visualizer, like Swagger UI.
 
 12. Another important implementation would be unit tests, where applicable, but most importantly, integration tests, making operations to a test database and route to guarantee API integrity.
+
+13. There's no type 'admin' defined or roles for managing the admin roles and using some authorization verification for accessing the resources related to this role. The approach used here just leaves the route available for whoever is "logged" (has a profile_id).

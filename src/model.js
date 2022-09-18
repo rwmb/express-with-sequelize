@@ -19,8 +19,66 @@ class Profile extends Sequelize.Model {
     await this.save();  
   }
 
-
+  /**
+   * Pays for a Job
+   * 
+   * @param { string } jobId The Job ID
+   * @returns {{ job: sequelize.Job, profile: sequelize.Profile }} The updated Job and Profile of the Client that made the request
+   */
+  async pay(jobId) {
+    const transaction = await sequelize.transaction();
+    try {
+      const response = {};
+      if (this.type !== 'client') throw new Error('Contractors cannot pay for jobs.');
   
+      const contractor = await Profile.findOne({
+        include: {
+          model: Contract,
+          as: 'Contractor',
+          where: {
+            ClientId: this.id
+          },
+          include: {
+            model: Job,
+            as: 'Jobs',
+            where: { id: jobId }
+          },
+        }
+        
+      });
+
+      const contract = contractor?.get('Contractor')?.at(0);
+      const job = contract?.get('Jobs')?.at(0);
+
+      if(!contractor || !contract || !job) throw new Error('Job not found');
+      if (contract.status === 'terminated') throw new Error('Cannot pay for terminated contracts');
+
+      if (job.paid) throw new Error('Job already paid.');
+      if (this.balance < job.price) throw new Error('Insufficient balance.');
+    
+      job.paid = true;
+      job.paymentDate = new Date();
+      await job.save();
+
+      this.balance -= job.price;
+      await this.save();
+
+      contractor.balance += job.price;
+      await contractor.save();
+
+      await transaction.commit();
+
+      response['job'] = job;
+      response['profile'] = this;
+    
+      return response;
+    } catch (error) {
+      await transaction.rollback();
+      console.error(error);
+      throw new Error('Error paying Job: ' + this.id);
+    }
+  }
+
   /**
    * Gets the list of unpaid jobs from active contracts
    * 
@@ -29,9 +87,7 @@ class Profile extends Sequelize.Model {
   async getUnpaidJobs() {
     if (!this.id) throw new Error('Profile not initialized.');
   
-    const clause = this.type === 'client' // should be Enum
-      ? { ClientId: this.id }
-      : { ContractorId: this.id };
+    const clause = Contract.getContractClause(this);
 
     clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
     clause['$Jobs.paid$'] = { [Sequelize.Op.not]: true };
@@ -50,6 +106,36 @@ class Profile extends Sequelize.Model {
     return response;
   }
   
+  static async getBestProfession(startDate, endDate) {
+    const profiles = await Profile.findAll({
+      order: [['amountMade', 'DESC']],
+      attributes: [
+        'profession',
+        [Sequelize.fn('SUM', Sequelize.col('Contracts.totalMadeOnContract')), 'totalMade'],
+      ],
+      group: ['profession'],
+      include: {
+        model: Contract,
+        as: 'Contracts',
+        attributes: [
+          'id',
+          [Sequelize.fn('SUM', Sequelize.col('Jobs.price')), 'totalMadeOnContract'],
+        ],
+        include: {
+          model: Job,
+          as: 'Jobs',
+          where: {
+            paymentDate: {
+              [Sequelize.Op.between]: [startDate, endDate]
+            }
+          }
+        }
+      }
+    });
+    
+    return profiles;
+  }
+
   /**
    * Gets the sum of the price of all unpaid jobs from active contracts
    * 
@@ -57,15 +143,24 @@ class Profile extends Sequelize.Model {
    */
   async getUnpaidJobsPrice() {
     if (!this.id) throw new Error('Profile not initialized.');
-    const result = await this.getUnpaidJobs();
 
-    // Could be done with the query itself but I have no experience with sequelize for complex queries yet.
-    // Could be done with reduce, forEach or for loop
-    // for loop should be faster but forEach and reduce is simpler to read
+    const clause = Contract.getContractClause(this);
+    clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
+    clause['$Jobs.paid$'] = { [Sequelize.Op.not]: true };
+    const contracts = await Contract.findAll({
+      where: clause,
+      attributes: [
+        [Sequelize.fn('SUM', Sequelize.col('Jobs.price')), 'totalContractAmount'],
+      ],
+      include: {
+        model: Job,
+        as: 'Jobs',
+      },
+    });
 
     let sum = 0;
     
-    sum = result.reduce((previous, currentJob) => previous + currentJob.price, sum);
+    sum = contracts.reduce((previous, currentContract) => previous + currentContract.totalContractAmount, sum);
     
     return sum;
   }
@@ -107,16 +202,24 @@ class Contract extends Sequelize.Model {
    * @returns { sequelize.Contract[] } All active Contracts that the profile has access to
    */
   static async getAll(profile) {
-    console.log('profile', profile);
-    const clause = profile.type === 'client' // should be Enum
-      ? { ClientId: profile.id }
-      : { ContractorId: profile.id };
+    const clause = Contract.getContractClause(profile);
 
     clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
 
     const contracts = await Contract.findAll({where: clause});
 
     return contracts;
+  }
+
+  /**
+   * Gets the Sequelize Clause Object to request the Contracts based on the profile
+   * @param { sequelize.Profile } profile The profile making the request
+   * @returns { { [key: string]: profile.id } } The Clause to make the Contract search based on the profile
+   */
+  static getContractClause(profile) {
+    return profile.type === 'client' // should be Enum
+      ? { ClientId: profile.id }
+      : { ContractorId: profile.id };
   }
 }
 Contract.init(
@@ -135,48 +238,7 @@ Contract.init(
   }
 );
 
-class Job extends Sequelize.Model {
-
-  /**
-   * Pays for a Job with the Client informatio provided.
-   * 
-   * @param {sequelize.Profile} client The Client paying for the Job
-   * @returns {{ job: sequelize.Job, profile: sequelize.Profile }} The updated Job and Profile of the Client that made the request
-   */
-  async pay(client) {
-    const transaction = await sequelize.transaction();
-    try {
-      const response = {};
-  
-      if (!this.id) throw new Error('Job not initialized.');
-      if (this.paid) throw new Error('Job already paid.');
-      if (client.balance < this.price) throw new Error('Insufficient balance.');
-
-      const contract = await Contract.findByPk(this.ContractId); // more contract verifications if necessary
-      const contractor = await Profile.findByPk(contract.ContractorId);
-    
-      this.paid = true;
-      this.paymentDate = '2020-08-15T19:11:26.737Z'; // TODO: correct current time here
-      await this.save();
-
-      client.balance -= this.price;
-      await client.save();
-
-      contractor.balance += this.price;
-      await contractor.save();
-
-      await transaction.commit();
-
-      response['job'] = this;
-      response['profile'] = client;
-    
-      return response;
-    } catch (error) {
-      await transaction.rollback();
-      throw new Error('Error paying Job: ' + this.id);
-    }
-  }
-}
+class Job extends Sequelize.Model {}
 Job.init(
   {
     description: {

@@ -9,6 +9,7 @@ const contractsRouter = require('./contracts/contracts.router');
 const jobsRouter = require('./jobs/jobs.router');
 
 router.use(authenticate);
+// middleware to stop SQL Injection
 
 router.use('/admin', adminRouter);
 router.use('/balances', balancesRouter);

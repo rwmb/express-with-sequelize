@@ -7,11 +7,10 @@
  * @returns { string } The best Profession in terms of earned money
  */
 const getBestProfession = async (req, res) => {
-  // Get all Contracts with ContractorId
-  // Include Jobs where paidAt between range and paid equals true
-  // sort by sum desc and get first
+  const { Profile } = req.app.get('models');
+  const { start, end } = req.query;
 
-  const result = {};
+  const result = Profile.getBestProfession(start, end);
   res.json(result);
 };
   

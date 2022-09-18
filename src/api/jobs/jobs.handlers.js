@@ -19,6 +19,26 @@ const getAllUnpaidJobs = async (req, res) => {
 };
 
 /**
+ * Gets the sum of unpaid Jobs from a list of active Contracts that the user has access to
+ * 
+ * @param { express.Request } req
+ * @param { express.Request } res
+ * @returns { number } The sum of unpaid Jobs from active contracts
+ */
+const getUnpaidJobsAmount = async (req, res) => {
+  const profile = req.profile;
+
+  try {
+    const result = await profile.getUnpaidJobsPrice();
+  
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(error.status || 500).end();
+  }
+};
+
+/**
  * Pays for a Job if the client has a balance bigger or equal to Job price.
  * The amount is moved from the client's balance to the contractor's balance
  * 
@@ -28,18 +48,18 @@ const getAllUnpaidJobs = async (req, res) => {
  */
 const pay = async (req, res) => {
   try {
-    const { Job } = req.app.get('models');
-    const { id } = req.params;
-    const job = await Job.findByPk(id);
-    const result = await job.pay(req.profile);
+    const { job_id } = req.params;
+    const result = await req.profile.pay(job_id);
   
     res.json(result);
   } catch (error) {
+    console.error(error);
     return res.status(error.status || 500).end();
   }
 };
 
 module.exports = {
   getAllUnpaidJobs,
+  getUnpaidJobsAmount,
   pay,
 };
