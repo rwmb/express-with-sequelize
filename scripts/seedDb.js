@@ -10,7 +10,7 @@ async function seed() {
   await Job.sync({ force: true });
   //insert data
   await Promise.all([
-   Profile.create({
+    Profile.create({
       id: 1,
       firstName: 'Harry',
       lastName: 'Potter',
@@ -77,7 +77,7 @@ async function seed() {
     Contract.create({
       id:1,
       terms: 'bla bla bla',
-     status: 'terminated',
+      status: 'terminated',
       ClientId: 1,
       ContractorId:5
     }),
@@ -237,6 +237,11 @@ async function seed() {
       price: 121,
       paid:true,
       paymentDate:'2020-08-14T23:11:26.737Z',
+      ContractId: 6,
+    }),
+    Job.create({
+      description: 'work',
+      price: 199,
       ContractId: 21,
     }),
     

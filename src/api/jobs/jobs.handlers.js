@@ -29,7 +29,7 @@ const getUnpaidJobsAmount = async (req, res) => {
   const profile = req.profile;
 
   try {
-    const result = await profile.getUnpaidJobsPrice();
+    const result = await profile.getUnpaidJobsAmount();
   
     res.json(result);
   } catch (error) {

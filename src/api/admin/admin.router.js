@@ -5,6 +5,6 @@ const handlers = require('./admin.handlers');
 
 router.get('/best-profession', handlers.getBestProfession);
 
-router.get('/best-clients?start=<date>&end=<date>&limit=<integer>', handlers.getBestClients);
+router.get('/best-clients', handlers.getBestClients);
 
 module.exports = router;

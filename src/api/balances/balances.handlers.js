@@ -3,8 +3,8 @@ const MAXIMUM_PERCENTAGE_TO_DEPOSIT = 25; // could be configured from many place
 /**
  * Deposits money into the balance of a client, up to a maximum percentage of unpaid jobs
  * 
- * @param { express.Request } req The request object containing the profile and amount to deposit
- * @param { express.Response } res The response object
+ * @param { express.Request } req
+ * @param { express.Response } res
  * @returns { sequelize.Profile } The updated Profile
  */
 const deposit = async (req, res) => {

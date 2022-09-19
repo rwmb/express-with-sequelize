@@ -7,11 +7,16 @@
  * @returns { string } The best Profession in terms of earned money
  */
 const getBestProfession = async (req, res) => {
-  const { Profile } = req.app.get('models');
-  const { start, end } = req.query;
+  try {
+    const { Profile } = req.app.get('models');
+    const { start, end } = req.query;
 
-  const result = Profile.getBestProfession(start, end);
-  res.json(result);
+    const result = await Profile.getBestProfession(start, end);
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(error.status || 500).end();
+  }
 };
   
 /**
@@ -23,17 +28,16 @@ const getBestProfession = async (req, res) => {
  * @returns { sequelize.Profile[] } The list of best clients
  */
 const getBestClients = async (req, res) => {
-  // Get all contracts with ClientID
-  // Include Jobs where payedAt between range and paid equals true
-  // sorted by sum desc and limited to the query param || 2 return result
+  try {
+    const { Profile } = req.app.get('models');
+    const { start, end, limit } = req.query;
 
-  // FIELDS TO SHOW
-  // id
-  // fullName
-  // paid
-
-  const result = {};
-  res.json(result);
+    const result = await Profile.getBestClients(start, end, parseInt(limit));
+    res.json(result);
+  } catch (error) {
+    console.error(error);
+    return res.status(error.status || 500).end();
+  }
 };
 
 module.exports = {

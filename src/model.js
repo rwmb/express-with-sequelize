@@ -87,15 +87,14 @@ class Profile extends Sequelize.Model {
   async getUnpaidJobs() {
     if (!this.id) throw new Error('Profile not initialized.');
   
-    const clause = Contract.getContractClause(this);
-
+    const clause = Contract.getProfileIdClause(this);
     clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
-    clause['$Jobs.paid$'] = { [Sequelize.Op.not]: true };
     const result = await Contract.findAll({
       where: clause,
       include: {
         model: Job,
         as: 'Jobs',
+        where: { paid: { [Sequelize.Op.not]: true } }
       },
     });
 
@@ -105,48 +104,20 @@ class Profile extends Sequelize.Model {
     
     return response;
   }
-  
-  static async getBestProfession(startDate, endDate) {
-    const profiles = await Profile.findAll({
-      order: [['amountMade', 'DESC']],
-      attributes: [
-        'profession',
-        [Sequelize.fn('SUM', Sequelize.col('Contracts.totalMadeOnContract')), 'totalMade'],
-      ],
-      group: ['profession'],
-      include: {
-        model: Contract,
-        as: 'Contracts',
-        attributes: [
-          'id',
-          [Sequelize.fn('SUM', Sequelize.col('Jobs.price')), 'totalMadeOnContract'],
-        ],
-        include: {
-          model: Job,
-          as: 'Jobs',
-          where: {
-            paymentDate: {
-              [Sequelize.Op.between]: [startDate, endDate]
-            }
-          }
-        }
-      }
-    });
-    
-    return profiles;
-  }
 
   /**
    * Gets the sum of the price of all unpaid jobs from active contracts
    * 
    * @returns { number } The sum of the price of all Jobs not yet paid
+   * TODO:
    */
-  async getUnpaidJobsPrice() {
+  async getUnpaidJobsAmount() {
     if (!this.id) throw new Error('Profile not initialized.');
 
-    const clause = Contract.getContractClause(this);
+    const clause = Contract.getProfileIdClause(this);
+
     clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
-    clause['$Jobs.paid$'] = { [Sequelize.Op.not]: true };
+  
     const contracts = await Contract.findAll({
       where: clause,
       attributes: [
@@ -155,14 +126,105 @@ class Profile extends Sequelize.Model {
       include: {
         model: Job,
         as: 'Jobs',
+        where: { paid: { [Sequelize.Op.not]: true } }
       },
     });
-
     let sum = 0;
     
     sum = contracts.reduce((previous, currentContract) => previous + currentContract.totalContractAmount, sum);
     
     return sum;
+  }
+  
+  /**
+   * Gets the best profession during the searched period
+   * 
+   * @param { sequelize.DATE } startDate The startDate in the time range to search
+   * @param { sequelize.DATE } endDate The endDate in the time range to search
+   * @returns { { profession: string, amountEarned: number } }
+   */
+  static async getBestProfession(startDate, endDate) {
+    const profiles = await Profile.findAll({
+      attributes: [
+        'profession',
+        [Sequelize.fn('SUM', Sequelize.col('Contractor->Jobs.price')), 'totalAmountEarned']
+      ],
+      order: [['totalAmountEarned', 'DESC']],
+      group: ['profession'],
+      subQuery:false,
+      limit: 1,
+      where: [{ type: 'contractor' }],
+      include: {
+        model: Contract,
+        as: 'Contractor',
+        include: {
+          model: Job,
+          as: 'Jobs',
+          where: {
+            paymentDate: {
+              [Sequelize.Op.between]: [startDate, endDate],
+            }
+          },
+        }
+      }
+    });
+
+    const bestProfession = profiles?.at(0);
+
+    const result = {
+      profession: bestProfession.get('profession'),
+      amountEarned: bestProfession.get('totalAmountEarned')
+    };
+
+    return result;
+  }
+
+
+  /**
+   * Gets the best client during the searched period
+   * 
+   * @param { sequelize.DATE } startDate The startDate in the time range to search
+   * @param { sequelize.DATE } endDate The endDate in the time range to search
+   * @param { number } limit The limit of entries to load
+   * @returns { { id: string, fullName: string, paid: number } }
+   */
+  static async getBestClients(startDate, endDate, limit = 2) {
+    const clients = await Profile.findAll({
+      attributes: [
+        'id', 'profession', 'firstName', 'lastName',
+        [Sequelize.fn('SUM', Sequelize.col('Client->Jobs.price')), 'totalAmountPaid']
+      ],
+      order: [['totalAmountPaid', 'DESC']],
+      group: ['Profile.id'],
+      subQuery:false,
+      limit,
+      where: [{ type: 'client' }],
+      include: {
+        model: Contract,
+        as: 'Client',
+        include: {
+          model: Job,
+          as: 'Jobs',
+          where: {
+            paymentDate: {
+              [Sequelize.Op.between]: [startDate, endDate],
+            }
+          },
+        }
+      }
+    });
+
+    const result = [];
+    clients.forEach((entry) => {
+      result.push({
+        id: entry.id,
+        // could be done with template literals but this approach is cleaner
+        fullName: entry.get('firstName') + ' ' + entry.get('lastName'),
+        paid: entry.get('totalAmountPaid'),
+      });
+    });
+
+    return result;
   }
 }
 
@@ -202,7 +264,7 @@ class Contract extends Sequelize.Model {
    * @returns { sequelize.Contract[] } All active Contracts that the profile has access to
    */
   static async getAll(profile) {
-    const clause = Contract.getContractClause(profile);
+    const clause = Contract.getProfileIdClause(profile);
 
     clause['status'] = { [Sequelize.Op.not]: 'terminated' }; // both should be Enum
 
@@ -216,7 +278,7 @@ class Contract extends Sequelize.Model {
    * @param { sequelize.Profile } profile The profile making the request
    * @returns { { [key: string]: profile.id } } The Clause to make the Contract search based on the profile
    */
-  static getContractClause(profile) {
+  static getProfileIdClause(profile) {
     return profile.type === 'client' // should be Enum
       ? { ClientId: profile.id }
       : { ContractorId: profile.id };

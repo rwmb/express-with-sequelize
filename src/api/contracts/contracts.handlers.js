@@ -1,6 +1,9 @@
 /**
  * Gets the requested Contract with the provided ID from a list of Contracts.
  * 
+ * I didn't change this route too much to keep it closer to the original,
+ * but this GET request should also be done through the Profile model
+ * 
  * @param { express.Request } req
  * @param { express.Response } res
  * @returns { sequelize.Contract } The requested Contract
@@ -11,7 +14,7 @@ const getOne = async (req, res) => {
     const { id } = req.params;
     const profile = req.profile;
   
-    const clause = Contract.getContractClause(profile);
+    const clause = Contract.getProfileIdClause(profile);
     clause['id'] = id;
 
     const contract = await Contract.findOne({where: clause});
